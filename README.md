@@ -1,3 +1,6 @@
+# This repo is for hackathon  https://webmcp.devpost.com/
+
+
 # repro-webmcp
 Reproduce any application state and see the real UI instantly
 
