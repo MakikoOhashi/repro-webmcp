@@ -16,7 +16,7 @@ function render(state) {
   message.textContent = state ? "Reproduced application state" : "Default application state";
 }
 
-const runtime = createReproRuntime(config, render);
+const runtime = createReproRuntime(config, render, { ttlMs: 15 * 60 * 1000 });
 render(runtime.getState());
 try {
   registerWebMCPTools(runtime);

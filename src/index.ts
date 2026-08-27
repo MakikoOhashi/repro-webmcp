@@ -1,8 +1,18 @@
 export type ReproState = Record<string, unknown>;
 export type ReproConfig = { states: Record<string, ReproState> };
 export type ReproToolResult = { content: Array<{ type: "text"; text: string }> };
+export type ReproSession = {
+  id: string;
+  expiresAt: number;
+  isActive: () => boolean;
+  end: () => void;
+  assertActive: () => void;
+  isExternalSideEffectAllowed: () => false;
+  blockExternalSideEffect: () => never;
+};
 export type ReproRuntime = {
   getState: () => ReproState | null;
+  getSession: () => ReproSession | null;
   listStates: () => string[];
   reproduceState: (name: string) => ReproState;
   resetState: () => null;
@@ -23,28 +33,76 @@ export function defineRepro<T>(config: T): T {
 export function createReproRuntime(
   config: ReproConfig,
   onStateChange: (state: ReproState | null) => void = () => {},
+  options: { ttlMs?: number } = {},
 ): ReproRuntime {
   let currentState: ReproState | null = null;
+  let session: ReproSession | null = null;
+
+  const createSession = (): ReproSession => {
+    const ttlMs = options.ttlMs ?? 15 * 60 * 1000;
+    let active = true;
+    const expiresAt = Date.now() + ttlMs;
+    const timer = setTimeout(() => {
+      active = false;
+      currentState = null;
+      session = null;
+      onStateChange(null);
+    }, ttlMs);
+
+    const created: ReproSession = {
+      id: `repro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      expiresAt,
+      isActive: () => active && Date.now() < expiresAt,
+      end: () => {
+        if (!active) return;
+        active = false;
+        clearTimeout(timer);
+        currentState = null;
+        if (session?.id === created.id) session = null;
+        onStateChange(null);
+      },
+      assertActive: () => {
+        if (!created.isActive()) throw new Error("Repro session has expired.");
+      },
+      isExternalSideEffectAllowed: () => false,
+      blockExternalSideEffect: () => {
+        throw new Error("External side effects are disabled in Repro mode.");
+      },
+    };
+    return created;
+  };
+
   return {
-    getState: () => currentState,
+    getState: () => (session?.isActive() ? currentState : null),
+    getSession: () => (session?.isActive() ? session : null),
     listStates: () => Object.keys(config.states),
     reproduceState: (name) => {
       const state = config.states[name];
       if (!state) throw new Error(`Unknown Repro state: ${name}`);
+      session?.end();
+      session = createSession();
       currentState = { ...state };
       onStateChange(currentState);
       return currentState;
     },
     resetState: () => {
-      currentState = null;
-      onStateChange(null);
+      session?.end();
       return null;
     },
   };
 }
 
 function textResult(value: unknown): ReproToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(value) }] };
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        repro_mode: true,
+        message: "Preview only. No real users, orders, payments, emails, webhooks, or notifications are affected.",
+        data: value,
+      }),
+    }],
+  };
 }
 
 export function registerWebMCPTools(runtime: ReproRuntime): void {
@@ -57,13 +115,13 @@ export function registerWebMCPTools(runtime: ReproRuntime): void {
 
   modelContext.registerTool({
     name: "list_states",
-    description: "List the reproducible application states.",
+    description: "List reproducible application states. Preview only; no real data is changed.",
     inputSchema: { type: "object", properties: {} },
     execute: () => textResult(runtime.listStates()),
   });
   modelContext.registerTool({
     name: "reproduce_state",
-    description: "Reproduce a named application state in the current UI.",
+    description: "Reproduce a named application state in an isolated, temporary Repro session.",
     inputSchema: {
       type: "object",
       properties: { state: { type: "string", enum: runtime.listStates() } },
@@ -73,7 +131,7 @@ export function registerWebMCPTools(runtime: ReproRuntime): void {
   });
   modelContext.registerTool({
     name: "reset_state",
-    description: "Reset the application to its default state.",
+    description: "End the temporary Repro session and reset the application.",
     inputSchema: { type: "object", properties: {} },
     execute: () => textResult(runtime.resetState()),
   });
