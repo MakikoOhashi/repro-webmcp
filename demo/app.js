@@ -19,7 +19,7 @@ function render(state) {
 const runtime = createReproRuntime(config, render, { ttlMs: 15 * 60 * 1000 });
 render(runtime.getState());
 try {
-  registerWebMCPTools(runtime);
+  await registerWebMCPTools(runtime);
   status.textContent = "WebMCP tools registered: list_states, reproduce_state, reset_state";
 } catch {
   status.textContent = "WebMCP unavailable";

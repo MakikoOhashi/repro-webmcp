@@ -22,9 +22,9 @@ type WebMCPTool = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  execute: (input: Record<string, unknown>) => ReproToolResult;
+  execute: (input: Record<string, unknown>) => Promise<ReproToolResult>;
 };
-type WebMCPContext = { registerTool: (tool: WebMCPTool) => void };
+type WebMCPContext = { registerTool: (tool: WebMCPTool) => Promise<void> };
 
 export function defineRepro<T>(config: T): T {
   return config;
@@ -92,7 +92,7 @@ export function createReproRuntime(
   };
 }
 
-function textResult(value: unknown): ReproToolResult {
+async function textResult(value: unknown): Promise<ReproToolResult> {
   return {
     content: [{
       type: "text",
@@ -105,7 +105,7 @@ function textResult(value: unknown): ReproToolResult {
   };
 }
 
-export function registerWebMCPTools(runtime: ReproRuntime): void {
+export async function registerWebMCPTools(runtime: ReproRuntime): Promise<void> {
   const browser = globalThis as typeof globalThis & {
     document?: { modelContext?: WebMCPContext };
     navigator?: { modelContext?: WebMCPContext };
@@ -113,13 +113,13 @@ export function registerWebMCPTools(runtime: ReproRuntime): void {
   const modelContext = browser.document?.modelContext ?? browser.navigator?.modelContext;
   if (!modelContext) throw new Error("WebMCP is not available in this browser.");
 
-  modelContext.registerTool({
+  await modelContext.registerTool({
     name: "list_states",
     description: "List reproducible application states. Preview only; no real data is changed.",
     inputSchema: { type: "object", properties: {} },
-    execute: () => textResult(runtime.listStates()),
+    execute: async () => textResult(runtime.listStates()),
   });
-  modelContext.registerTool({
+  await modelContext.registerTool({
     name: "reproduce_state",
     description: "Reproduce a named application state in an isolated, temporary Repro session.",
     inputSchema: {
@@ -127,12 +127,12 @@ export function registerWebMCPTools(runtime: ReproRuntime): void {
       properties: { state: { type: "string", enum: runtime.listStates() } },
       required: ["state"],
     },
-    execute: (input) => textResult(runtime.reproduceState(String(input.state))),
+    execute: async (input) => textResult(runtime.reproduceState(String(input.state))),
   });
-  modelContext.registerTool({
+  await modelContext.registerTool({
     name: "reset_state",
     description: "End the temporary Repro session and reset the application.",
     inputSchema: { type: "object", properties: {} },
-    execute: () => textResult(runtime.resetState()),
+    execute: async () => textResult(runtime.resetState()),
   });
 }
