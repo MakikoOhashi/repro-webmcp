@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createReproRuntime } from "../dist/index.js";
 import * as browser from "../dist/browser.js";
+import * as packagedBundle from "repro-webmcp/browser-bundle";
 
 test("browser entry exports runtime APIs", () => {
   assert.equal(browser.createReproRuntime, createReproRuntime);
   assert.equal(typeof browser.registerWebMCPTools, "function");
+  assert.equal(typeof packagedBundle.createReproRuntime, "function");
 });
 
 test("subscribe notifies initially, on reproduce, and on reset", () => {
@@ -22,6 +24,7 @@ test("subscribe notifies initially, on reproduce, and on reset", () => {
   unsubscribe();
   runtime.reproduceState("free_expired");
   assert.equal(received.length, 3);
+  runtime.resetState();
 });
 
 test("subscriber exceptions do not break other subscribers", () => {

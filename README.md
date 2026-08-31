@@ -102,7 +102,20 @@ Bundler projects can import the browser entry directly:
 import { createReproRuntime, registerWebMCPTools } from "repro-webmcp/browser";
 ```
 
-For a static HTML + ES modules app, browsers cannot resolve the bare package name. Copy both dist/browser.js and dist/index.js from the package tarball into a public/vendor/repro-webmcp directory, then import the copied browser.js file with a relative URL. The browser entry has no Node-only dependency.
+For a static HTML + ES modules app, browsers cannot resolve the bare package name. Copy the single self-contained bundle:
+
+```bash
+cp node_modules/repro-webmcp/dist/browser.bundle.js \
+  public/vendor/repro-webmcp.js
+```
+
+Then import that one file with a relative URL:
+
+```js
+import { createReproRuntime, registerWebMCPTools } from "./vendor/repro-webmcp.js";
+```
+
+The bundle has no Node-only runtime dependency. Bundler projects can continue using the public repro-webmcp/browser entry.
 
 #### State updates
 
