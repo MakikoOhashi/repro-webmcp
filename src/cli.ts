@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const CONFIG_FILENAME = "repro.config.ts";
+const CONFIG_FILES = ["repro.config.js", "repro.config.ts"];
 const INITIAL_CONFIG = `import { defineRepro } from "repro-webmcp";
 
 export default defineRepro({
@@ -11,24 +11,58 @@ export default defineRepro({
 });
 `;
 
-function init(): void {
-  const configPath = join(process.cwd(), CONFIG_FILENAME);
-
-  if (existsSync(configPath)) {
-    console.log(`${CONFIG_FILENAME} already exists.`);
-    return;
+function hasTypeScriptProject(): boolean {
+  if (existsSync(join(process.cwd(), "tsconfig.json"))) return true;
+  const packagePath = join(process.cwd(), "package.json");
+  if (!existsSync(packagePath)) return false;
+  try {
+    const packageJson = JSON.parse(readFileSync(packagePath, "utf8")) as {
+      dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
+    };
+    return Boolean(
+      packageJson.dependencies?.typescript ||
+      packageJson.devDependencies?.typescript,
+    );
+  } catch {
+    return false;
   }
-
-  writeFileSync(configPath, INITIAL_CONFIG, "utf8");
-  console.log("Repro initialized.");
-  console.log(`Created: ${CONFIG_FILENAME}`);
 }
 
-const [command] = process.argv.slice(2);
+function parseFormat(args: string[]): "js" | "ts" | undefined {
+  const index = args.indexOf("--format");
+  const equalsValue = args.find((arg) => arg.startsWith("--format="))?.slice(9);
+  const value = index >= 0 ? args[index + 1] : equalsValue;
+  if (value === undefined) return undefined;
+  if (value === "js" || value === "ts") return value;
+  console.error("Unknown format. Use --format js or --format ts.");
+  process.exitCode = 1;
+  return undefined;
+}
+
+function init(args: string[]): void {
+  const requestedFormat = parseFormat(args);
+  if (process.exitCode) return;
+
+  for (const filename of CONFIG_FILES) {
+    if (existsSync(join(process.cwd(), filename))) {
+      console.log(`${filename} already exists.`);
+      return;
+    }
+  }
+
+  const format = requestedFormat ?? (hasTypeScriptProject() ? "ts" : "js");
+  const filename = `repro.config.${format}`;
+  writeFileSync(join(process.cwd(), filename), INITIAL_CONFIG, "utf8");
+  console.log("Repro initialized.");
+  console.log(`Created: ${filename}`);
+}
+
+const [command, ...args] = process.argv.slice(2);
 
 if (command === "init") {
-  init();
+  init(args);
 } else {
-  console.error("Usage: repro init");
+  console.error("Usage: repro init [--format js|ts]");
   process.exitCode = 1;
 }

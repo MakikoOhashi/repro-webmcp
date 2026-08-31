@@ -1,6 +1,7 @@
 export type ReproState = Record<string, unknown>;
 export type ReproConfig = { states: Record<string, ReproState> };
 export type ReproToolResult = { content: Array<{ type: "text"; text: string }> };
+export type ReproStateListener = (state: ReproState | null) => void;
 export type ReproSession = {
   id: string;
   expiresAt: number;
@@ -16,6 +17,7 @@ export type ReproRuntime = {
   listStates: () => string[];
   reproduceState: (name: string) => ReproState;
   resetState: () => null;
+  subscribe: (listener: ReproStateListener) => () => void;
 };
 
 type WebMCPTool = {
@@ -37,6 +39,22 @@ export function createReproRuntime(
 ): ReproRuntime {
   let currentState: ReproState | null = null;
   let session: ReproSession | null = null;
+  const listeners = new Set<ReproStateListener>();
+
+  const notifyStateChange = (state: ReproState | null): void => {
+    try {
+      onStateChange(state);
+    } catch {
+      // Application render callbacks must not break the runtime.
+    }
+    for (const listener of listeners) {
+      try {
+        listener(state);
+      } catch {
+        // One subscriber must not prevent other subscribers from receiving updates.
+      }
+    }
+  };
 
   const createSession = (): ReproSession => {
     const ttlMs = options.ttlMs ?? 15 * 60 * 1000;
@@ -46,7 +64,7 @@ export function createReproRuntime(
       active = false;
       currentState = null;
       session = null;
-      onStateChange(null);
+      notifyStateChange(null);
     }, ttlMs);
 
     const created: ReproSession = {
@@ -59,7 +77,7 @@ export function createReproRuntime(
         clearTimeout(timer);
         currentState = null;
         if (session?.id === created.id) session = null;
-        onStateChange(null);
+        notifyStateChange(null);
       },
       assertActive: () => {
         if (!created.isActive()) throw new Error("Repro session has expired.");
@@ -82,12 +100,23 @@ export function createReproRuntime(
       session?.end();
       session = createSession();
       currentState = { ...state };
-      onStateChange(currentState);
+      notifyStateChange(currentState);
       return currentState;
     },
     resetState: () => {
       session?.end();
       return null;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      try {
+        listener(session?.isActive() ? currentState : null);
+      } catch {
+        // A listener error during initial notification is isolated.
+      }
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

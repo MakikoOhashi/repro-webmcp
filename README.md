@@ -49,6 +49,7 @@ The goal is simple:
 > **Describe the state you want to see → Repro creates it → open the real application UI in that state.**
 
 Repro does not decide whether the UI is correct. Humans, coding agents, Playwright, or other QA tools can inspect the resulting UI.
+
 ### Verified integration
 
 The MVP flow was verified with real WebMCP in Cloudflare Browser Run: all three tools were discovered, `free_expired` was reproduced in an isolated session, the TEST / REPRO MODE indicator was shown, and `reset_state` returned the application to its normal state.
@@ -65,44 +66,17 @@ npm install -D repro-webmcp
 npx repro init
 ```
 
-`repro init` analyzes the application and generates the initial Repro configuration and adapters.
-
-It can inspect signals such as:
-
-* authentication
-* database schemas / ORM models
-* feature flags
-* existing fixtures and test utilities
-* subscription and plan states
-* usage limits
-* onboarding states
-
-Generated configuration is reviewed by the developer before it becomes available to Repro.
-
-As the application evolves:
+repro init creates a minimal state configuration. Choose the format explicitly when needed:
 
 ```bash
-npx repro scan
+npx repro init          # Uses TypeScript when tsconfig.json or TypeScript is present; otherwise JavaScript
+npx repro init --format js
+npx repro init --format ts
 ```
 
-Repro analyzes the latest code and identifies newly introduced states that may be useful to reproduce.
+The initial MVP does not analyze application code or generate adapters. State definitions are reviewed and maintained by the developer.
 
-For example:
-
-```text
-Detected new reproducible states:
-
-+ subscription_status
-+ customer_rank
-+ onboarding_step
-
-Existing:
-✓ plan
-✓ usage_count
-```
-
-The developer can then approve and add them.
-
+As a future design direction, a later scan command may help discover useful states. It is not part of the current runtime or CLI implementation.
 ### Proposed CLI
 
 ```bash
@@ -115,6 +89,30 @@ repro doctor    # Validate configuration and safety boundaries
 AI-assisted discovery happens during development, not inside the production runtime.
 
 This keeps the deployed runtime small and predictable while allowing the Repro configuration to evolve alongside the application.
+
+### Frontend-only integration
+
+Repro is a frontend-only semantic state override. Backend tests answer whether the system can reach a state; Repro shows what the real UI looks like in that state.
+
+#### Browser/no-build usage
+
+Bundler projects can import the browser entry directly:
+
+```js
+import { createReproRuntime, registerWebMCPTools } from "repro-webmcp/browser";
+```
+
+For a static HTML + ES modules app, browsers cannot resolve the bare package name. Copy both dist/browser.js and dist/index.js from the package tarball into a public/vendor/repro-webmcp directory, then import the copied browser.js file with a relative URL. The browser entry has no Node-only dependency.
+
+#### State updates
+
+Runtime consumers can subscribe without a framework:
+
+```js
+const unsubscribe = runtime.subscribe((state) => renderApp(state));
+```
+
+subscribe() immediately receives the current state (or null), receives updates after reproduction and reset, and returns an unsubscribe function.
 
 ## Design Principle
 
