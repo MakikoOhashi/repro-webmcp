@@ -49,6 +49,10 @@ The goal is simple:
 > **Describe the state you want to see → Repro creates it → open the real application UI in that state.**
 
 Repro does not decide whether the UI is correct. Humans, coding agents, Playwright, or other QA tools can inspect the resulting UI.
+### Verified integration
+
+The MVP flow was verified with real WebMCP in Cloudflare Browser Run: all three tools were discovered, `free_expired` was reproduced in an isolated session, the TEST / REPRO MODE indicator was shown, and `reset_state` returned the application to its normal state.
+
 
 ---
 

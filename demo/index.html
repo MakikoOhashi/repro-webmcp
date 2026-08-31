@@ -7,7 +7,7 @@
     <style>
       :root { font-family: system-ui, sans-serif; color: #172033; background: #f4f6fb; }
       body { margin: 0; display: grid; place-items: center; min-height: 100vh; }
-      body::after { content: "REPRO MODE"; position: fixed; right: 12px; bottom: 12px; color: #3157a4; opacity: .25; font-size: 12px; font-weight: 800; letter-spacing: .12em; pointer-events: none; }
+      .watermark { position: fixed; right: 12px; bottom: 12px; z-index: 10; color: #3157a4; opacity: .55; font-size: 12px; font-weight: 800; letter-spacing: .12em; pointer-events: none; }
       main { width: min(680px, calc(100% - 32px)); background: white; padding: 32px; border-radius: 16px; box-shadow: 0 12px 40px #1c2a4a18; }
       h1 { margin-top: 0; }
       .banner { margin: -32px -32px 24px; padding: 10px 32px; background: #fff3cd; color: #664d03; font-size: 13px; font-weight: 700; }
@@ -18,6 +18,7 @@
     </style>
   </head>
   <body>
+    <div class="watermark" aria-hidden="true">REPRO MODE</div>
     <main>
       <div class="banner">TEST / REPRO MODE — No real users, orders, payments, emails, webhooks, or notifications are affected.</div>
       <span class="badge">REPRO DEMO</span>
