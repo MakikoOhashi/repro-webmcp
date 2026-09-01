@@ -76,7 +76,14 @@ npx repro init --format ts
 
 The initial MVP does not analyze application code or generate adapters. State definitions are reviewed and maintained by the developer.
 
-As a future design direction, a later scan command may help discover useful states. It is not part of the current runtime or CLI implementation.
+The deterministic scan command discovers state-like literals, TypeScript unions/enums, and UI conditions without network or LLM access:
+
+```bash
+npx repro scan
+npx repro scan --dry-run
+```
+
+It prints source-file evidence and generates a compatible config. Existing repro.config.js or repro.config.ts files are never overwritten; scan uses a generated config filename instead.
 ### Proposed CLI
 
 ```bash

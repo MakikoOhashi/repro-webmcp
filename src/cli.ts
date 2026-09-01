@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { detectsTypeScriptProject, scanAndGenerate } from "./scanner.js";
 
 const CONFIG_FILES = ["repro.config.js", "repro.config.ts"];
 const INITIAL_CONFIG = `import { defineRepro } from "repro-webmcp";
@@ -40,6 +41,14 @@ function parseFormat(args: string[]): "js" | "ts" | undefined {
   return undefined;
 }
 
+function scan(args: string[]): void {
+  const result = scanAndGenerate(process.cwd(), {
+    dryRun: args.includes("--dry-run"),
+    format: detectsTypeScriptProject(process.cwd()) ? "ts" : "js",
+  });
+  console.log(result.output);
+}
+
 function init(args: string[]): void {
   const requestedFormat = parseFormat(args);
   if (process.exitCode) return;
@@ -62,7 +71,9 @@ const [command, ...args] = process.argv.slice(2);
 
 if (command === "init") {
   init(args);
+} else if (command === "scan") {
+  scan(args);
 } else {
-  console.error("Usage: repro init [--format js|ts]");
+  console.error("Usage: repro init [--format js|ts] | repro scan [--dry-run]");
   process.exitCode = 1;
 }
