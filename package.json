@@ -1,6 +1,6 @@
 {
   "name": "repro-webmcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reproduce application states through a small developer CLI and runtime library.",
   "type": "module",
   "bin": {
