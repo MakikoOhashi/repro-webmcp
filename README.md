@@ -1,271 +1,189 @@
-# This repo is for hackathon  https://webmcp.devpost.com/
-
-
 # repro-webmcp
-Reproduce any application state and see the real UI instantly
 
-We don't run your tests. We create the state you need to see.
+Repro discovers application states from existing JavaScript / TypeScript code and makes those states reproducible through WebMCP.
 
-- Target
--AI coding agentsを使ってWebアプリを開発する開発者
+> **We do not run your tests. We create the state you need to see.**
 
-- Problem
--特定状態のUIを確認したいだけなのに、その状態を作る作業が面倒。
+Repro helps developers inspect the real application UI in difficult-to-reach states such as an expired subscription, failed payment, loading, error, or usage limit.
 
-- Scope
--自然言語 → WebMCP → semantic state生成 → isolated session → 実Webアプリをその状態で描画。
+## Quick start
 
-- Not Scope
--テスト実行、PASS/FAIL判定、Visual Regression、Browser Agent、Playwright代替。
+Install the published package:
 
-## How It Works
+~~~bash
+npm install -D repro-webmcp@0.1.1
+~~~
 
-`repro-webmcp` consists of two layers:
+Initialize a minimal config and scan the application code:
 
-### 1. Runtime Library
+~~~bash
+npx repro init
+npx repro scan
+~~~
 
-The runtime is embedded into your web application and exposes safe, reproducible application states through WebMCP.
+Use npx repro scan --dry-run to inspect candidates without writing a config.
 
-Instead of creating a separate MCP tool for every scenario, Repro exposes a small, stable interface such as:
+repro init supports JavaScript and TypeScript configs:
 
-```text
+~~~bash
+npx repro init --format js
+npx repro init --format ts
+~~~
+
+Without an explicit format, Repro chooses TypeScript when a tsconfig.json, TypeScript dependency, or TypeScript source is present. Otherwise it creates JavaScript config.
+
+## Automatic state discovery
+
+repro scan is deterministic, local, AST-based heuristic static analysis. It supports JavaScript, TypeScript, JSX, and TSX source files.
+
+For example, ordinary application code such as:
+
+~~~tsx
+if (subscription === "expired") {
+  return <ExpiredBanner />;
+}
+
+if (paymentStatus === "failed") {
+  return <PaymentError />;
+}
+~~~
+
+can produce candidates such as expired and failed, including source-file and line evidence. Candidates can come from:
+
+- UI conditional branches
+- compound conditions
+- literal unions and enums
+- fixtures, mocks, tests, stories, and seeds
+- state-like object literals
+
+The scanner ranks semantic and UI-related states above internal workflow states, removes duplicate candidates deterministically, and limits output to 20 candidates. It does not use an LLM, network access, a database, or application source rewriting.
+
+If repro.config.js or repro.config.ts already exists, repro scan does not overwrite it. It writes a generated config under a separate filename.
+
+No manually written Repro scenario is required for the discovery step, but the application still determines how a discovered state is rendered.
+
+## WebMCP tools
+
+The runtime exposes three tools when the browser provides the WebMCP registration API:
+
+~~~text
 list_states
 reproduce_state
 reset_state
-```
+~~~
 
-Application-specific states are expressed as parameters:
+- list_states lists states in the loaded Repro config.
+- reproduce_state applies one named state to a temporary Repro Session.
+- reset_state ends the session and returns the runtime to its normal state.
 
-```json
-{
-  "plan": "free",
-  "usage_count": 9,
-  "subscription_status": "expired"
-}
-```
+The runtime also provides getState(), getSession(), and a framework-independent subscription API:
 
-The goal is simple:
+~~~js
+const unsubscribe = runtime.subscribe((state) => {
+  renderApp(state);
+});
+~~~
 
-> **Describe the state you want to see → Repro creates it → open the real application UI in that state.**
+Subscribers receive the current state immediately (null initially), then receive reproduction and reset updates. Calling unsubscribe() removes the listener. Listener exceptions are isolated from the runtime.
 
-Repro does not decide whether the UI is correct. Humans, coding agents, Playwright, or other QA tools can inspect the resulting UI.
+## How it works
 
-### Verified integration
+~~~text
+Existing application code
+        ↓
+   npx repro scan
+        ↓
+Detected state candidates + evidence
+        ↓
+Generated Repro config
+        ↓
+Repro Runtime
+        ↓
+WebMCP tools
+        ↓
+The existing application UI
+~~~
 
-The MVP flow was verified with real WebMCP in Cloudflare Browser Run: all three tools were discovered, `free_expired` was reproduced in an isolated session, the TEST / REPRO MODE indicator was shown, and `reset_state` returned the application to its normal state.
+Backend tests answer whether the system can reach a state. Repro is for seeing what the real UI looks like in that state. It does not replace a test runner, browser agent, Playwright, or visual regression tool.
 
+## Safety and isolation
 
----
+Each reproduced state creates an isolated, temporary Repro Session. Sessions have a TTL and are cleaned up when they expire or are reset. The session API reports external side effects as disabled and can explicitly block an application operation:
 
-### 2. Developer CLI
+~~~js
+const session = runtime.getSession();
+session?.assertActive();
+session?.blockExternalSideEffect();
+~~~
 
-The CLI helps developers integrate and maintain Repro without manually describing every application state.
+Tool responses include this safety message:
 
-```bash
-npm install -D repro-webmcp
-npx repro init
-```
+> Preview only. No real users, orders, payments, emails, webhooks, or notifications are affected.
 
-repro init creates a minimal state configuration. Choose the format explicitly when needed:
+Applications must route sensitive operations through their own sandbox or Repro safety boundary. Repro does not connect to production databases, create real users, submit real orders, or provide an automatic repro doctor safety audit.
 
-```bash
-npx repro init          # Uses TypeScript when tsconfig.json or TypeScript is present; otherwise JavaScript
-npx repro init --format js
-npx repro init --format ts
-```
+The included demo displays TEST / REPRO MODE and REPRO MODE as visible safety indicators. These demo indicators are static HTML; the runtime does not provide a banner or watermark helper.
 
-The initial MVP does not analyze application code or generate adapters. State definitions are reviewed and maintained by the developer.
+## Browser and no-build usage
 
-The deterministic scan command discovers state-like literals, TypeScript unions/enums, and UI conditions without network or LLM access:
+Bundler projects can use the public browser subpath:
 
-```bash
-npx repro scan
-npx repro scan --dry-run
-```
+~~~js
+import {
+  createReproRuntime,
+  registerWebMCPTools,
+} from "repro-webmcp/browser";
+~~~
 
-It prints source-file evidence and generates a compatible config. Existing repro.config.js or repro.config.ts files are never overwritten; scan uses a generated config filename instead.
-### Proposed CLI
+For a static HTML + ES modules application, copy the single self-contained browser bundle:
 
-```bash
-repro init      # Initialize Repro for an existing application
-repro scan      # Discover new reproducible states from the latest code
-repro add       # Add an approved state to the Repro configuration
-repro doctor    # Validate configuration and safety boundaries
-```
-
-AI-assisted discovery happens during development, not inside the production runtime.
-
-This keeps the deployed runtime small and predictable while allowing the Repro configuration to evolve alongside the application.
-
-### Frontend-only integration
-
-Repro is a frontend-only semantic state override. Backend tests answer whether the system can reach a state; Repro shows what the real UI looks like in that state.
-
-#### Browser/no-build usage
-
-Bundler projects can import the browser entry directly:
-
-```js
-import { createReproRuntime, registerWebMCPTools } from "repro-webmcp/browser";
-```
-
-For a static HTML + ES modules app, browsers cannot resolve the bare package name. Copy the single self-contained bundle:
-
-```bash
-cp node_modules/repro-webmcp/dist/browser.bundle.js \
+~~~bash
+cp node_modules/repro-webmcp/dist/browser.bundle.js \\
   public/vendor/repro-webmcp.js
-```
+~~~
 
-Then import that one file with a relative URL:
+Then import the copied file by relative URL:
 
-```js
-import { createReproRuntime, registerWebMCPTools } from "./vendor/repro-webmcp.js";
-```
+~~~js
+import {
+  createReproRuntime,
+  registerWebMCPTools,
+} from "./vendor/repro-webmcp.js";
+~~~
 
-The bundle has no Node-only runtime dependency. Bundler projects can continue using the public repro-webmcp/browser entry.
+The bundle is an ESM file and does not require dist/index.js or Node-only dependencies at runtime.
 
-#### State updates
+## Live demo and validation
 
-Runtime consumers can subscribe without a framework:
+Live demo: https://repro-webmcp.pages.dev/demo/
 
-```js
-const unsubscribe = runtime.subscribe((state) => renderApp(state));
-```
+In a WebMCP-capable browser, the demo attempts to register the three tools. In an ordinary browser without WebMCP, the UI remains visible and displays WebMCP unavailable.
 
-subscribe() immediately receives the current state (or null), receives updates after reproduction and reset, and returns an unsubscribe function.
+The runtime and demo flow were verified with real WebMCP for the hand-written demo states: tool discovery, isolated reproduction, visible demo indicators, and reset. Scan-generated states have deterministic local and package-level coverage. A real-browser validation of a scan-generated state is not claimed here.
 
-## Design Principle
+## Current limitations
 
-Repro does **not** try to become another test runner or browser agent.
+- State discovery is heuristic AST-based static analysis, not full program or type analysis.
+- No LLM or natural-language state inference is included.
+- Framework-specific deep analysis and backend adapters are not included.
+- repro add and repro doctor are not implemented in 0.1.1.
+- The scanner can suggest a state; application code determines how that state is rendered.
+- WebMCP requires a compatible browser API. Unsupported browsers use the demo fallback but cannot invoke the tools.
 
-Its responsibility ends at:
+## Development
 
-```text
-Application code
-      ↓
-Discover reproducible states
-      ↓
-Developer approval
-      ↓
-WebMCP
-      ↓
-Create isolated application state
-      ↓
-Render the real UI
-```
+~~~bash
+npm test
+npm run build
+npm pack --dry-run
+~~~
 
-Browser agents, humans, and testing tools can take over from there.
+## Links
 
-> **We don't run your tests. We create the state you need to see.**
----
+- GitHub: https://github.com/MakikoOhashi/repro-webmcp
+- npm package: https://www.npmjs.com/package/repro-webmcp
+- Live demo: https://repro-webmcp.pages.dev/demo/
 
-## Repro Mode Safety / Repro Mode の安全設計
+## License
 
-Repro can run against a deployed web application, but reproduced states must never mutate real user data or trigger real-world side effects.
-
-Repro はデプロイ済みの Web アプリ上でも利用できます。ただし、再現された状態が実ユーザーデータを変更したり、現実の副作用を発生させたりしてはいけません。
-
-### Isolated Repro Sessions / 隔離された Repro Session
-
-Every reproduction runs inside an isolated Repro Session.
-
-すべての状態再現は、隔離された Repro Session 内で実行します。
-
-```text id="hs26en"
-reproduce_state(...)
-        ↓
-Create isolated Repro Session
-        ↓
-Generate simulated application state
-        ↓
-Render the real application UI
-        ↓
-Expire and clean up automatically
-```
-
-A Repro Session must not modify real users, orders, subscriptions, payments, or other production records.
-
-Repro Session は、実ユーザー、注文、契約、決済、その他の本番レコードを変更しません。
-
-External side effects such as payments, emails, webhooks, notifications, and real order submission must be disabled or sandboxed.
-
-決済、メール、Webhook、通知、実注文の送信などの外部副作用は、無効化または sandbox 化します。
-
-Temporary Repro data should have a TTL and be automatically removed after the session expires.
-
-一時的に生成された Repro データには TTL を設定し、セッション終了後に自動削除します。
-
----
-
-### Agent Confirmation / Agent 側での明示
-
-After reproducing a state, the Agent should explicitly explain that the state is simulated.
-
-状態を再現した際、Agent はそれがシミュレーションであることを明示します。
-
-Example:
-
-> **Repro state created. No real order, payment, email, or external action was executed.**
-
-例：
-
-> **状態を再現しました。実際の注文、決済、メール送信、その他の外部処理は実行されていません。**
-
-This confirmation should be returned even if the person invoking Repro is not the original application developer.
-
-この確認は、Repro を実行したユーザーがアプリの開発者本人でない場合にも表示します。
-
----
-
-### Visible Repro Mode / UI 上での明示
-
-Agent confirmation alone is not sufficient.
-
-チャット上の通知だけでは十分ではありません。
-
-While a Repro Session is active, the application UI should display a persistent indicator such as:
-
-Repro Session が有効な間、Web アプリには以下のような表示を常時出します。
-
-> **TEST / REPRO MODE**
-> This is a simulated state. No real order, payment, or external action has been executed.
-
-日本語例：
-
-> **TEST / REPRO MODE**
-> これは再現されたテスト状態です。実際の注文・決済・外部処理は実行されていません。
-
-For sensitive interfaces such as payments, e-commerce, subscriptions, financial dashboards, or administrative screens, Repro may additionally display a persistent `REPRO MODE` watermark.
-
-決済、EC、契約、金融情報、管理画面など、実データと誤認されるリスクが高い画面では、`REPRO MODE` のウォーターマークを重ねて表示することもできます。
-
-This reduces the risk of screenshots from a simulated state being mistaken for evidence of a real transaction or production state.
-
-これにより、Repro で生成した画面のスクリーンショットが、実際の取引・注文・契約・本番状態の証憑として誤認されるリスクを抑えます。
-
----
-
-### Safety Checks / 安全性チェック
-
-`repro doctor` should verify the application's Repro configuration before deployment or use.
-
-`repro doctor` は、デプロイや利用前に Repro の安全設定を検証します。
-
-```text id="u0mx1m"
-✓ Repro session isolated
-✓ Production mutations blocked
-✓ External side effects disabled
-✓ Repro banner enabled
-✓ Repro watermark configured
-✓ TTL configured
-✓ Cleanup configured
-```
-
-The core principle is:
-
-基本原則：
-
-> **Reproduce production-like UI states without mutating production data.**
-
-> **本番データを変更することなく、本番同等の UI 状態を再現する。**
-
+MIT
