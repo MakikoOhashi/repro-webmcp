@@ -220,7 +220,7 @@ The runtime and demo flow were verified with real WebMCP for the hand-written de
 - State discovery is heuristic AST-based static analysis, not full program or type analysis.
 - No LLM or natural-language state inference is included.
 - Framework-specific deep analysis and backend adapters are not included.
-- repro add and repro doctor are not implemented in 0.1.1.
+- repro add and repro doctor are not implemented in 0.1.3.
 - The scanner can suggest a state; application code determines how that state is rendered.
 - WebMCP requires a compatible browser API. Unsupported browsers use the demo fallback but cannot invoke the tools.
 
