@@ -6,6 +6,17 @@ Repro discovers application states from existing JavaScript / TypeScript code an
 
 Repro helps developers inspect the real application UI in difficult-to-reach states such as an expired subscription, failed payment, loading, error, or usage limit.
 
+## npm authentication on a VPS
+
+For npm authentication on the VPS, use the web/browser flow:
+
+~~~bash
+npm login --auth-type=web
+npm whoami
+~~~
+
+Use this before publishing. Do not request or invent an OTP unless npm explicitly requires one for the account.
+
 ## Quick start
 
 Install the published package:
