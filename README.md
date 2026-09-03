@@ -214,6 +214,7 @@ Live demo: https://repro-webmcp.pages.dev/demo/
 In a WebMCP-capable browser, the demo attempts to register the three tools. In an ordinary browser without WebMCP, the UI remains visible and displays WebMCP unavailable.
 
 The runtime and demo flow were verified with real WebMCP for the hand-written demo states: tool discovery, isolated reproduction, visible demo indicators, and reset. Scan-generated states have deterministic local and package-level coverage. A real-browser validation of a scan-generated state is not claimed here.
+A short demo video is available on [YouTube](https://youtu.be/ABlLZCd160k).
 
 ## Current limitations
 
