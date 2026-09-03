@@ -215,6 +215,7 @@ In a WebMCP-capable browser, the demo attempts to register the three tools. In a
 
 The runtime and demo flow were verified with real WebMCP for the hand-written demo states: tool discovery, isolated reproduction, visible demo indicators, and reset. Scan-generated states have deterministic local and package-level coverage. A real-browser validation of a scan-generated state is not claimed here.
 A short demo video is available on [YouTube](https://youtu.be/ABlLZCd160k).
+Challenge submission: [Devpost](https://devpost.com/software/repro-webmcp)
 
 ## Current limitations
 
