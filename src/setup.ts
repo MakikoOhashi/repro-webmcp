@@ -31,7 +31,7 @@ function browserBootstrap(states: Record<string, Record<string, Primitive>>): st
   return `import { createReproRuntime, registerWebMCPTools } from "./vendor/repro-webmcp.js";
 import adapter from "./repro.adapter.js";
 
-const runtime = createReproRuntime(${JSON.stringify({ states }, null, 2)}, undefined, { adapter });
+export const runtime = createReproRuntime(${JSON.stringify({ states }, null, 2)}, undefined, { adapter });
 globalThis.reproRuntime = runtime;
 try {
   await registerWebMCPTools(runtime);

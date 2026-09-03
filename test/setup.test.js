@@ -19,6 +19,8 @@ test("setup generates config, browser bootstrap, bundle, and HTML wiring", () =>
   assert.equal(existsSync(join(root, "repro.adapter.js")), true);
   assert.match(readFileSync(join(root, "repro.setup.js"), "utf8"), /repro\.adapter\.js/);
   assert.match(readFileSync(join(root, "repro.setup.js"), "utf8"), /expired/);
+  assert.match(readFileSync(join(root, "repro.setup.js"), "utf8"), /export const runtime = createReproRuntime/);
+  assert.doesNotMatch(readFileSync(join(root, "repro.setup.js"), "utf8"), /globalThis\.reproRuntime \?\?/);
   assert.match(readFileSync(join(root, "index.html"), "utf8"), /repro\.setup\.js/);
 });
 

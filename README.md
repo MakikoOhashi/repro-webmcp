@@ -22,7 +22,7 @@ Use this before publishing. Do not request or invent an OTP unless npm explicitl
 Install the published package:
 
 ~~~bash
-npm install -D repro-webmcp@0.1.3
+npm install -D repro-webmcp@0.1.4
 ~~~
 
 Initialize a minimal config and scan the application code:
@@ -49,7 +49,7 @@ After reviewing the discovered states, run the explicit setup step for a static 
 npx repro setup
 ~~~
 
-This creates the generated config, copies the self-contained browser runtime to `vendor/repro-webmcp.js`, and wires a root `index.html` to `repro.setup.js`. Existing Repro config files and existing setup files are not overwritten. The generated browser bootstrap registers `list_states`, `reproduce_state`, and `reset_state`; connect the generated adapter to the application's existing state source for real UI updates. Projects with another HTML entrypoint should import `repro.setup.js` from that entrypoint.
+This creates the generated config, copies the self-contained browser runtime to `vendor/repro-webmcp.js`, and wires a root `index.html` to `repro.setup.js`. Existing Repro config files and existing setup files are not overwritten. The generated browser bootstrap registers `list_states`, `reproduce_state`, and `reset_state`; connect the generated adapter to the application's existing state source for real UI updates. Projects with another HTML entrypoint should import `repro.setup.js` from that entrypoint. The generated module exports the canonical scan-backed runtime as `runtime`; use that export in the app instead of creating a second runtime from an older config.
 
 
 repro init supports JavaScript and TypeScript configs:
@@ -220,7 +220,7 @@ The runtime and demo flow were verified with real WebMCP for the hand-written de
 - State discovery is heuristic AST-based static analysis, not full program or type analysis.
 - No LLM or natural-language state inference is included.
 - Framework-specific deep analysis and backend adapters are not included.
-- repro add and repro doctor are not implemented in 0.1.3.
+- repro add and repro doctor are not implemented in 0.1.4.
 - The scanner can suggest a state; application code determines how that state is rendered.
 - WebMCP requires a compatible browser API. Unsupported browsers use the demo fallback but cannot invoke the tools.
 
