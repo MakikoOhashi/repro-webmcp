@@ -11,7 +11,7 @@ Repro helps developers inspect the real application UI in difficult-to-reach sta
 Install the published package:
 
 ~~~bash
-npm install -D repro-webmcp@0.1.1
+npm install -D repro-webmcp@0.1.3
 ~~~
 
 Initialize a minimal config and scan the application code:
@@ -23,6 +23,24 @@ npx repro scan
 
 Use npx repro scan --dry-run to inspect candidates without writing a config.
 
+Repro's agent-native flow is:
+
+1. Run npx repro scan to discover semantic states and source evidence.
+2. Run npx repro setup. A supported high-confidence pattern can use zero-code auto-integration.
+3. Otherwise, setup expands the npm-bundled templates/agent-integration.md into .repro/AGENTS.md with the scan evidence. A coding agent connects one generic bridge to the existing application state boundary and normal render path.
+4. Use the WebMCP tools list_states, reproduce_state, and reset_state to inspect the actual application UI.
+
+> Repro discovers the states. If your app needs a custom connection, Repro gives your coding agent the integration instructions automatically.
+
+After reviewing the discovered states, run the explicit setup step for a static HTML / ES modules app:
+
+~~~bash
+npx repro setup
+~~~
+
+This creates the generated config, copies the self-contained browser runtime to `vendor/repro-webmcp.js`, and wires a root `index.html` to `repro.setup.js`. Existing Repro config files and existing setup files are not overwritten. The generated browser bootstrap registers `list_states`, `reproduce_state`, and `reset_state`; connect the generated adapter to the application's existing state source for real UI updates. Projects with another HTML entrypoint should import `repro.setup.js` from that entrypoint.
+
+
 repro init supports JavaScript and TypeScript configs:
 
 ~~~bash
@@ -31,6 +49,31 @@ npx repro init --format ts
 ~~~
 
 Without an explicit format, Repro chooses TypeScript when a tsconfig.json, TypeScript dependency, or TypeScript source is present. Otherwise it creates JavaScript config.
+
+### Setup adapter
+
+`repro setup` also creates `repro.adapter.js`. Connect this one generic boundary to the application's existing state source; do not repeat or rename discovered states:
+
+~~~js
+export default {
+  applyReproState(state) {
+    appState.replace(state);
+  },
+  resetReproState() {
+    appState.restore();
+  },
+};
+~~~
+
+The adapter changes the application's normal state source, so its existing render path updates the real UI. It does not write to the DOM, call a network, or mutate production data. Re-running setup preserves an existing adapter.
+
+Safe adapter auto-generation is limited to an explicitly exported JavaScript `appState` object with callable `setState` and `reset` methods. When that exact shape is not found, setup generates the manual adapter scaffold and reports `manual adapter required`; it does not guess React, Redux, Zustand, Context, auth, or server state.
+
+When setup cannot safely identify an application state boundary, it expands the versioned instruction bundled at `templates/agent-integration.md` into `.repro/AGENTS.md` with project-specific scan evidence. The coding-agent instruction asks for one generic bridge to the existing state source and render path; it does not ask for manual Repro scenarios or state-specific adapter branches.
+
+Automatic zero-code UI state reproduction currently supports the narrow, statically identifiable module-level JavaScript pattern of an exported mutable object state plus an exported `render()` function in the same module. `repro setup` adds development-only hooks that assign generic scan-generated state data and call that existing render path. Other architectures, including the current Coaching auth module, fall back to the standardized adapter and are reported as `manual adapter required`.
+
+The supported auto-instrumentation scope also includes a narrow cross-module JavaScript pattern: a module-level mutable state with an exported getter, plus a separate JavaScript module that imports that getter and exports `render()`. When statically verified, setup adds development-only generic hooks to the owner and re-runs the existing render path. Other architectures fall back to `manual adapter required`.
 
 ## Automatic state discovery
 

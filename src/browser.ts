@@ -10,5 +10,6 @@ export type {
   ReproSession,
   ReproState,
   ReproStateListener,
+  ReproStateAdapter,
   ReproToolResult,
 } from "./index.js";

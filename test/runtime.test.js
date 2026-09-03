@@ -38,3 +38,21 @@ test("subscriber exceptions do not break other subscribers", () => {
   assert.doesNotThrow(() => runtime.resetState());
   assert.equal(received.at(-1), null);
 });
+
+test("state adapter is called on reproduce and reset", () => {
+  let appState = null;
+  const adapter = {
+    applyReproState: (state) => { appState = state; },
+    resetReproState: () => { appState = null; },
+  };
+  const runtime = createReproRuntime(
+    { states: { expired: { subscription: "expired" } } },
+    undefined,
+    { adapter },
+  );
+
+  runtime.reproduceState("expired");
+  assert.deepEqual(appState, { subscription: "expired" });
+  runtime.resetState();
+  assert.equal(appState, null);
+});

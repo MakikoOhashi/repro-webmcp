@@ -1,6 +1,6 @@
 {
   "name": "repro-webmcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Reproduce application states through a small developer CLI and runtime library.",
   "type": "module",
   "bin": {
@@ -22,7 +22,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
     "build": "tsc && node scripts/build-browser-bundle.mjs",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "repro-webmcp": "^0.1.2",
     "wrangler": "^4.126.0"
   },
   "license": "MIT",

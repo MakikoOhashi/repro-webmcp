@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import ts from "typescript";
 
 export type ScanEvidence = { file: string; line: number };
@@ -193,7 +193,7 @@ function collectFromFile(source: ts.SourceFile, file: string): ScanCandidate[] {
 function isReproArtifact(path: string): boolean {
   const normalized = path.replaceAll("\\", "/");
   const file = normalized.slice(normalized.lastIndexOf("/") + 1);
-  return /^repro(?:\.generated)?\.config\.(?:js|ts)$/.test(file) || (normalized.split("/").includes("vendor") && file === "repro-webmcp.js");
+  return /^repro(?:\.generated)?\.config\.(?:js|ts)$/.test(file) || file === "repro.setup.js" || file === "repro.adapter.js" || normalized.split("/").includes(".repro") || (normalized.split("/").includes("vendor") && file === "repro-webmcp.js");
 }
 
 function scanFiles(rootDir: string): string[] {
@@ -214,6 +214,119 @@ function scanFiles(rootDir: string): string[] {
 
 function stableState(state: Record<string, Primitive>): string {
   return JSON.stringify(Object.fromEntries(Object.entries(state).sort(([a], [b]) => a.localeCompare(b))));
+}
+
+
+export type SafeAdapterSource = { modulePath: string; exportName: string; };
+
+function hasExportModifier(node: ts.Node): boolean {
+  return Boolean(ts.getModifiers(node as ts.HasModifiers)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+}
+
+function hasCallableProperty(object: ts.ObjectLiteralExpression, name: string): boolean {
+  return object.properties.some((property) => {
+    if (ts.isMethodDeclaration(property)) return keyName(property.name) === name;
+    if (ts.isPropertyAssignment(property) && keyName(property.name) === name) {
+      return ts.isFunctionExpression(property.initializer) || ts.isArrowFunction(property.initializer);
+    }
+    return false;
+  });
+}
+
+export function detectSafeAdapterSource(rootDir: string): SafeAdapterSource | undefined {
+  for (const path of scanFiles(rootDir)) {
+    if (!path.endsWith(".js")) continue;
+    let sourceText: string;
+    try { sourceText = readFileSync(path, "utf8"); } catch { continue; }
+    const source = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement) || !hasExportModifier(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "appState" || !declaration.initializer || !ts.isObjectLiteralExpression(declaration.initializer)) continue;
+        if (hasCallableProperty(declaration.initializer, "setState") && hasCallableProperty(declaration.initializer, "reset")) {
+          return { modulePath: "./" + relative(rootDir, path).replaceAll("\\", "/"), exportName: declaration.name.text };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+export type SafeModuleStateSource = { modulePath: string; bindingName: string; renderName: string; initialState: Primitive };
+
+export function detectSafeModuleStateSource(rootDir: string): SafeModuleStateSource | undefined {
+  for (const path of scanFiles(rootDir)) {
+    if (!path.endsWith(".js")) continue;
+    let sourceText: string;
+    try { sourceText = readFileSync(path, "utf8"); } catch { continue; }
+    const source = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const render = source.statements.find((statement) => ts.isFunctionDeclaration(statement) && hasExportModifier(statement) && statement.name?.text === "render");
+    if (!render) continue;
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement) || !hasExportModifier(statement) || !(statement.declarationList.flags & ts.NodeFlags.Let)) continue;
+      const declaration = statement.declarationList.declarations[0];
+      if (!declaration || !ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+      const initialState = objectStateValue(declaration.initializer);
+      if (initialState === undefined || typeof initialState !== "object") continue;
+      return {
+        modulePath: "./" + relative(rootDir, path).replaceAll("\\", "/"),
+        bindingName: declaration.name.text,
+        renderName: "render",
+        initialState,
+      };
+    }
+  }
+  return undefined;
+}
+
+export type SafeCrossModuleSource = {
+  ownerPath: string;
+  bindingName: string;
+  getterName: string;
+  initialState: Primitive;
+  renderPath: string;
+  renderName: string;
+};
+
+function moduleSpecifierPath(rootDir: string, importer: string, specifier: string): string | undefined {
+  if (!specifier.startsWith(".")) return undefined;
+  const base = join(rootDir, dirname(importer), specifier);
+  const candidates = [base, base + ".js", join(base, "index.js")];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  return found ? relative(rootDir, found).replaceAll("\\", "/") : undefined;
+}
+
+export function detectSafeCrossModuleSource(rootDir: string): SafeCrossModuleSource | undefined {
+  const owners: Array<{ ownerPath: string; bindingName: string; getterName: string; initialState: Primitive }> = [];
+  for (const path of scanFiles(rootDir)) {
+    if (!path.endsWith(".js")) continue;
+    let sourceText: string;
+    try { sourceText = readFileSync(path, "utf8"); } catch { continue; }
+    const stateMatch = sourceText.match(/(?:^|\n)\s*let\s+([A-Za-z_$][\w$]*)\s*=\s*(\{[\s\S]*?\})\s*;/);
+    if (!stateMatch) continue;
+    const bindingName = stateMatch[1];
+    const jsonText = stateMatch[2].replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":');
+    let initialState: Primitive | undefined;
+    try { initialState = JSON.parse(jsonText) as Primitive; } catch { continue; }
+    const getterMatch = sourceText.match(/export\s+function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{[\s\S]*?return\s+([A-Za-z_$][\w$]*)\s*;/);
+    if (typeof initialState === "object" && initialState !== null && getterMatch?.[2] === bindingName) {
+      owners.push({ ownerPath: relative(rootDir, path).replaceAll("\\", "/"), bindingName, getterName: getterMatch[1], initialState });
+    }
+  }
+  for (const owner of owners) {
+    for (const renderPath of scanFiles(rootDir).filter((path) => path.endsWith(".js"))) {
+      if (renderPath === join(rootDir, owner.ownerPath)) continue;
+      let sourceText: string;
+      try { sourceText = readFileSync(renderPath, "utf8"); } catch { continue; }
+      const importer = relative(rootDir, renderPath).replaceAll("\\", "/");
+      const importMatch = sourceText.match(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/);
+      const renderMatch = sourceText.match(/export\s+function\s+render\s*\(/);
+      if (importMatch && importMatch[1].split(",").some((name) => name.trim() === owner.getterName) && renderMatch && moduleSpecifierPath(rootDir, importer, importMatch[2]) === owner.ownerPath && sourceText.includes(owner.getterName + "(")) {
+        return { ...owner, renderPath: importer, renderName: "render" };
+      }
+    }
+  }
+  return undefined;
 }
 
 export function detectsTypeScriptProject(rootDir: string): boolean {

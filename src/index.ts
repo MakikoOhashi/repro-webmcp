@@ -2,6 +2,10 @@ export type ReproState = Record<string, unknown>;
 export type ReproConfig = { states: Record<string, ReproState> };
 export type ReproToolResult = { content: Array<{ type: "text"; text: string }> };
 export type ReproStateListener = (state: ReproState | null) => void;
+export type ReproStateAdapter = {
+  applyReproState: (state: ReproState) => void;
+  resetReproState: () => void;
+};
 export type ReproSession = {
   id: string;
   expiresAt: number;
@@ -35,7 +39,7 @@ export function defineRepro<T>(config: T): T {
 export function createReproRuntime(
   config: ReproConfig,
   onStateChange: (state: ReproState | null) => void = () => {},
-  options: { ttlMs?: number } = {},
+  options: { ttlMs?: number; adapter?: ReproStateAdapter } = {},
 ): ReproRuntime {
   let currentState: ReproState | null = null;
   let session: ReproSession | null = null;
@@ -64,6 +68,7 @@ export function createReproRuntime(
       active = false;
       currentState = null;
       session = null;
+      try { options.adapter?.resetReproState(); } catch { /* adapter errors do not break cleanup */ }
       notifyStateChange(null);
     }, ttlMs);
 
@@ -77,6 +82,7 @@ export function createReproRuntime(
         clearTimeout(timer);
         currentState = null;
         if (session?.id === created.id) session = null;
+        try { options.adapter?.resetReproState(); } catch { /* adapter errors do not break cleanup */ }
         notifyStateChange(null);
       },
       assertActive: () => {
@@ -100,6 +106,7 @@ export function createReproRuntime(
       session?.end();
       session = createSession();
       currentState = { ...state };
+      try { options.adapter?.applyReproState(currentState); } catch { /* adapter errors do not break the runtime */ }
       notifyStateChange(currentState);
       return currentState;
     },
